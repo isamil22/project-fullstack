@@ -25,12 +25,19 @@ public class EmailService {
         mailSender.send(message);
     }
 
+    // --- THIS METHOD IS UPDATED ---
     public void sendConfirmationCode(User user){
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
         message.setTo(user.getEmail());
-        message.setSubject("Confirm your email");
-        message.setText("Please confirm your email by entering this code " + user.getConfirmationCode());
+        message.setSubject("Confirm your email for BeautyCosmetics");
+
+        // This creates a full link for the user to click, which is better practice.
+        // It assumes your frontend has a page at /confirm-email that can handle the code.
+        String confirmationUrl = "http://localhost:8081/confirm-email?code=" + user.getConfirmationCode();
+
+        message.setText("Thank you for registering! Please click the link below to activate your account:\n" + confirmationUrl + "\n\nAlternatively, you can enter this code on the confirmation page: " + user.getConfirmationCode());
+
         mailSender.send(message);
     }
 

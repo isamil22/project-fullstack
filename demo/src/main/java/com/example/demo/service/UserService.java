@@ -1,148 +1,76 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.ChangePasswordRequest;
-import com.example.demo.dto.UserDTO;
-import com.example.demo.exception.ResourceNotFoundException;
-import com.example.demo.mapper.UserMapper;
+import com.example.demo.dto.SignupRequest;
+import com.example.demo.model.ERole;
+import com.example.demo.model.Role;
 import com.example.demo.model.User;
-import com.example.demo.repositories.CommentRepository;
-import com.example.demo.repositories.OrderRepository;
-import com.example.demo.repositories.ReviewRepository;
+import com.example.demo.repositories.RoleRepository;
 import com.example.demo.repositories.UserRepository;
-import jakarta.transaction.Transactional;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Random;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class UserService {
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final EmailService emailService;
-    private final UserMapper userMapper;
 
-    // --- CORRECT: Injected repositories to handle dependent data ---
-    private final OrderRepository orderRepository;
-    private final CommentRepository commentRepository;
-    private final ReviewRepository reviewRepository;
-    // -----------------------------------------------------------------
+    @Autowired
+    private UserRepository userRepository;
 
-    @Value("${frontend.url}")
-    private String frontendUrl;
+    @Autowired
+    private RoleRepository roleRepository;
 
-    public User registerUser(User user){
-        if(userRepository.findByEmail(user.getEmail()).isPresent()) {
-            throw new IllegalStateException("Email already taken");
-        }
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setRole(User.Role.USER);
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EmailService emailService;
+
+    public User registerUser(SignupRequest signupRequest) {
+        User user = new User(signupRequest.getUsername(),
+                signupRequest.getEmail(),
+                passwordEncoder.encode(signupRequest.getPassword()));
+
+        user.setEmailConfirmed(false);
         user.setConfirmationCode(generateConfirmationCode());
-        user.setEmailConfirmation(false);
-        emailService.sendConfirmationCode(user);
-        return userRepository.save(user);
+
+        Set<Role> roles = new HashSet<>();
+        Role userRole = roleRepository.findByName(ERole.ROLE_USER)
+                .orElseThrow(() -> new RuntimeException("Error: Role is not found."));
+        roles.add(userRole);
+        user.setRoles(roles);
+
+        User savedUser = userRepository.save(user);
+        emailService.sendConfirmationEmail(savedUser.getEmail(), savedUser.getConfirmationCode());
+        return savedUser;
     }
 
-    public User getUserByEmail(String email){
-        return userRepository.findByEmail(email).orElseThrow(()-> new ResourceNotFoundException("User not found"));
-    }
+    public void confirmEmail(String confirmationCode) {
+        User user = userRepository.findByConfirmationCode(confirmationCode)
+                .orElseThrow(() -> new RuntimeException("Invalid confirmation code."));
 
-    public void changePassword(String email, ChangePasswordRequest request){
-        User user = getUserByEmail(email);
-        if(!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new BadCredentialsException("Current password is incorrect");
-        }
-
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setEmailConfirmed(true);
+        user.setConfirmationCode(null);
         userRepository.save(user);
     }
 
-    public void confirmEmail(String email, String confirmationCode){
-        User user = getUserByEmail(email);
-        if(user.getConfirmationCode().equals(confirmationCode)){
-            user.setEmailConfirmation(true);
-            user.setConfirmationCode(null);
-            userRepository.save(user);
-        }
-        else{
-            throw new BadCredentialsException("Invalid confirmation code");
-        }
-    }
+    public void resendConfirmationEmail(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found with this email."));
 
-    private String generateConfirmationCode(){
-        Random random = new Random();
-        int code = 100000 + random.nextInt(900000);
-        return String.valueOf(code);
-    }
-
-    public User getUserById(Long id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
-    }
-
-    public List<UserDTO> getAllUsers() {
-        return userMapper.toDTOs(userRepository.findAll());
-    }
-
-    /**
-     * Deletes a user and all of their associated data (orders, comments, reviews).
-     * The cart is deleted automatically thanks to the CascadeType.ALL setting.
-     * The @Transactional annotation ensures that if any part of this process fails,
-     * the entire operation is rolled back, preventing partial data deletion.
-     */
-    @Transactional
-    public void deleteUser(Long id) {
-        // First, check if the user exists
-        if (!userRepository.existsById(id)) {
-            throw new ResourceNotFoundException("User not found with id: " + id);
+        if (user.isEmailConfirmed()) {
+            throw new IllegalStateException("Email is already confirmed.");
         }
 
-        // --- CORRECT: Delete all dependent entities before deleting the user ---
-        // NOTE: You must ensure findByUserId methods exist in these repositories.
-        orderRepository.deleteAll(orderRepository.findByUserId(id));
-        commentRepository.deleteAll(commentRepository.findByUserId(id));
-        reviewRepository.deleteAll(reviewRepository.findByUserId(id));
-        // --------------------------------------------------------------------
-
-        // Finally, delete the user. The associated cart will be deleted automatically.
-        userRepository.deleteById(id);
-    }
-
-    public UserDTO updateUserRole(Long id, User.Role role) {
-        User user = getUserById(id);
-        user.setRole(role);
-        User updatedUser = userRepository.save(user);
-        return userMapper.toDTO(updatedUser);
-    }
-
-    public void forgotPassword(String email) {
-        User user = getUserByEmail(email);
-        String token = UUID.randomUUID().toString();
-        user.setResetPasswordToken(token);
-        user.setResetPasswordTokenExpiry(LocalDateTime.now().plusHours(1)); // Token is valid for 1 hour
+        user.setConfirmationCode(generateConfirmationCode());
         userRepository.save(user);
-        String resetLink = frontendUrl + "/reset-password/" + token;
-        emailService.sendPasswordResetEmail(user, resetLink);
+        emailService.sendConfirmationEmail(user.getEmail(), user.getConfirmationCode());
     }
 
-    public void resetPassword(String token, String newPassword) {
-        User user = userRepository.findByResetPasswordToken(token)
-                .orElseThrow(() -> new ResourceNotFoundException("Invalid password reset token"));
-
-        if (user.getResetPasswordTokenExpiry().isBefore(LocalDateTime.now())) {
-            throw new BadCredentialsException("Password reset token has expired");
-        }
-
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setResetPasswordToken(null);
-        user.setResetPasswordTokenExpiry(null);
-        userRepository.save(user);
+    private String generateConfirmationCode() {
+        return UUID.randomUUID().toString();
     }
 }

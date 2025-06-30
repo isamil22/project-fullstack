@@ -1,86 +1,77 @@
 package com.example.demo.model;
 
-import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
+import jakarta.persistence.Table;
 
-import java.time.LocalDateTime; // <-- IMPORT THIS
-import java.util.Collection;
-import java.util.List;
+import javax.persistence.*;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Table(name="users")
-public class User implements UserDetails {
+@Table(name = "users",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = "username"),
+                @UniqueConstraint(columnNames = "email")
+        })
+public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @NotBlank(message = "Full name is required")
-    private String fullName;
+    @NotBlank
+    @Size(max = 20)
+    private String username;
 
     @NotBlank
+    @Size(max = 50)
     @Email
-    @Column(unique = true) // <-- CORRECT: Ensures no duplicate emails in the database.
     private String email;
 
     @NotBlank
+    @Size(max = 120)
     private String password;
 
-    @Enumerated(EnumType.STRING)
-    private Role role;
+    // --- Add this field ---
+    @Column(name = "email_confirmed")
+    private boolean emailConfirmed;
 
-    // IMPROVEMENT: Added orphanRemoval=true to ensure the cart is deleted if the user is.
-    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Cart cart;
-
-    private boolean emailConfirmation;
+    // --- Add this field ---
+    @Column(name = "confirmation_code")
     private String confirmationCode;
 
-    // --- CORRECT: Added missing fields for Password Reset ---
-    private String resetPasswordToken;
-    private LocalDateTime resetPasswordTokenExpiry;
-    // ----------------------------------------------------
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(  name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "role_id"))
+    private Set<Role> roles = new HashSet<>();
 
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_"+role.name()));
+    public User() {
     }
 
-    @Override
-    public String getUsername() {
-        return email;
+    public User(String username, String email, String password) {
+        this.username = username;
+        this.email = email;
+        this.password = password;
     }
 
-    @Override
-    public boolean isAccountNonExpired() {
-        return true;
-    }
+    // --- Existing Getters and Setters... ---
 
-    @Override
-    public boolean isAccountNonLocked() {
-        return true;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    public Set<Role> getRoles() { return roles; }
+    public void setRoles(Set<Role> roles) { this.roles = roles; }
 
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return true;
-    }
-
-    public enum Role{
-        USER, ADMIN
-    }
+    // --- Add these Getters and Setters ---
+    public boolean isEmailConfirmed() { return emailConfirmed; }
+    public void setEmailConfirmed(boolean emailConfirmed) { this.emailConfirmed = emailConfirmed; }
+    public String getConfirmationCode() { return confirmationCode; }
+    public void setConfirmationCode(String confirmationCode) { this.confirmationCode = confirmationCode; }
 }

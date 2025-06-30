@@ -1,106 +1,91 @@
 package com.example.demo.controller;
 
+import com.example.demo.config.JwtUtils;
 import com.example.demo.dto.*;
-import com.example.demo.exception.ResourceNotFoundException;
-import com.example.demo.mapper.UserMapper;
-import com.example.demo.model.User;
-import com.example.demo.service.JwtService;
+import com.example.demo.repositories.UserRepository;
+import com.example.demo.service.UserDetailsImpl;
 import com.example.demo.service.UserService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
-    private final AuthenticationManager authenticationManager;
-    private final UserService userService;
-    private final JwtService jwtService;
-    private final UserMapper userMapper;
+
+    @Autowired
+    AuthenticationManager authenticationManager;
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Autowired
+    UserService userService;
+
+    @Autowired
+    JwtUtils jwtUtils;
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody LoginRequest loginRequest){
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword())
-        );
-        final UserDetails userDetails = userService.getUserByEmail(loginRequest.getEmail());
-        final String jwt = jwtService.generateToken(userDetails);
-        return ResponseEntity.ok(jwt);
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        String jwt = jwtUtils.generateJwtToken(authentication);
+
+        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        List<String> roles = userDetails.getAuthorities().stream()
+                .map(item -> item.getAuthority())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(new LoginResponse(jwt,
+                userDetails.getId(),
+                userDetails.getUsername(),
+                userDetails.getEmail(),
+                userDetails.isEmailConfirmed(),
+                roles));
     }
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@Valid @RequestBody User user){
-        return ResponseEntity.ok(userService.registerUser(user));
-    }
+    public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest) {
+        if (userRepository.existsByUsername(signUpRequest.getUsername())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Username is already taken!"));
+        }
+        if (userRepository.existsByEmail(signUpRequest.getEmail())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is already in use!"));
+        }
 
-    @PostMapping("/change-password")
-    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request){
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String email = authentication.getName();
-        userService.changePassword(email, request);
-        return ResponseEntity.ok().body("Password changed");
+        userService.registerUser(signUpRequest);
+        return ResponseEntity.ok(new MessageResponse("User registered successfully! Please check your email for a confirmation link."));
     }
 
     @PostMapping("/confirm-email")
-    public ResponseEntity<?> confirmEmail(@RequestBody EmailConfirmationRequest request){
-        try{
-            userService.confirmEmail(request.getEmail(), request.getConfirmationCode());
-            return ResponseEntity.ok().body("Email confirmed successfuly");
-        }catch (BadCredentialsException e){
-            return ResponseEntity.badRequest().body("Invalid confirmation code");
-        }
-        catch (ResourceNotFoundException e){
-            return ResponseEntity.notFound().build();
+    public ResponseEntity<?> confirmUserEmail(@RequestBody EmailConfirmationRequest request) {
+        try {
+            userService.confirmEmail(request.getConfirmationCode());
+            return ResponseEntity.ok(new MessageResponse("Email confirmed successfully!"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }
     }
 
-    @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest request) {
-        userService.forgotPassword(request.getEmail());
-        return ResponseEntity.ok("Password reset link sent to your email.");
-    }
-
-    @PostMapping("/reset-password")
-    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest request) {
-        userService.resetPassword(request.getToken(), request.getNewPassword());
-        return ResponseEntity.ok("Password reset successfully.");
-    }
-
-    @GetMapping("/user/role")
-    public ResponseEntity<String> getUserRole() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String email = authentication.getName();
-        User user = userService.getUserByEmail(email);
-
-        if (user != null) {
-            String role = String.valueOf(user.getRole());
-            return ResponseEntity.ok(role);
+    @PostMapping("/resend-confirmation-email")
+    public ResponseEntity<?> resendConfirmationEmail(@Valid @RequestBody ResendConfirmationEmailRequest request) {
+        try {
+            userService.resendConfirmationEmail(request.getEmail());
+            return ResponseEntity.ok(new MessageResponse("A new confirmation email has been sent."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse(e.getMessage()));
         }
-        return ResponseEntity.notFound().build();
-    }
-
-    @GetMapping("/user/{id}")
-    public ResponseEntity<String> getUserEmailById(@PathVariable Long id) {
-        User user = userService.getUserById(id);
-        if (user != null) {
-            return ResponseEntity.ok(user.getEmail());
-        }
-        return ResponseEntity.notFound().build();
-    }
-
-    @GetMapping("/user/profile")
-    public ResponseEntity<UserDTO> getUserProfile() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String email = authentication.getName();
-        User user = userService.getUserByEmail(email);
-        return ResponseEntity.ok(userMapper.toDTO(user));
     }
 }

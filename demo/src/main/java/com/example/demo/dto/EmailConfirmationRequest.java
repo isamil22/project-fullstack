@@ -1,9 +1,16 @@
 package com.example.demo.dto;
 
-import lombok.Data;
+import javax.validation.constraints.NotBlank;
 
-@Data
 public class EmailConfirmationRequest {
-    private String email;
+    @NotBlank
     private String confirmationCode;
+
+    public String getConfirmationCode() {
+        return confirmationCode;
+    }
+
+    public void setConfirmationCode(String confirmationCode) {
+        this.confirmationCode = confirmationCode;
+    }
 }
