@@ -69,9 +69,28 @@ public class User {
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }
 
+<<<<<<< HEAD
     // --- Add these Getters and Setters ---
     public boolean isEmailConfirmed() { return emailConfirmed; }
     public void setEmailConfirmed(boolean emailConfirmed) { this.emailConfirmed = emailConfirmed; }
     public String getConfirmationCode() { return confirmationCode; }
     public void setConfirmationCode(String confirmationCode) { this.confirmationCode = confirmationCode; }
+=======
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+//    @Override
+//    public boolean isEnabled() {
+//        return true;
+//    }
+    @Override
+    public boolean isEnabled() {
+        return this.emailConfirmation;
+    }
+    public enum Role{
+        USER, ADMIN
+    }
+>>>>>>> new-feature
 }

@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 @Data
 @AllArgsConstructor
 public class ProductListDTO {
+
     private Long id;
     @NotBlank(message = "Name is required")
     private String name;
@@ -22,4 +23,5 @@ public class ProductListDTO {
     private Integer quantity;
     private String image;
     private String brand; // Added brand
+
 }

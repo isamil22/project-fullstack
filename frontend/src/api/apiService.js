@@ -1,3 +1,5 @@
+// PATH: frontend/src/api/apiService.js
+
 import axios from 'axios';
 
 const apiService = axios.create({
@@ -35,6 +37,14 @@ export const loginUser = (credentials) => {
     return apiService.post('/auth/login', credentials);
 };
 
+// --- THIS IS THE NEW FUNCTION ---
+export const confirmEmail = (confirmationData) => {
+    // confirmationData should be an object like { email, confirmationCode }
+    return apiService.post('/auth/confirm-email', confirmationData);
+};
+// --- END OF NEW FUNCTION ---
+
+
 export const logoutUser = () => {
     localStorage.removeItem('token');
 };
@@ -54,7 +64,6 @@ export const removeCartItem = (productId) => {
 export const addToCart = (productId, quantity) => {
     return apiService.post(`/cart/add?productId=${productId}&quantity=${quantity}`);
 };
-
 
 export const createOrder = (orderData) => {
     return apiService.post(`/orders?address=${orderData.address}&phoneNumber=${orderData.phoneNumber}`);
