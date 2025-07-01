@@ -1,7 +1,6 @@
 package com.example.demo.model;
 
-import jakarta.persistence.Table;
-
+import javax.management.relation.Role;
 import javax.persistence.*;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
@@ -33,11 +32,9 @@ public class User {
     @Size(max = 120)
     private String password;
 
-    // --- Add this field ---
     @Column(name = "email_confirmed")
     private boolean emailConfirmed;
 
-    // --- Add this field ---
     @Column(name = "confirmation_code")
     private String confirmationCode;
 
@@ -56,7 +53,7 @@ public class User {
         this.password = password;
     }
 
-    // --- Existing Getters and Setters... ---
+    // --- Getters and Setters ---
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -68,29 +65,18 @@ public class User {
     public void setPassword(String password) { this.password = password; }
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }
-
-<<<<<<< HEAD
-    // --- Add these Getters and Setters ---
     public boolean isEmailConfirmed() { return emailConfirmed; }
     public void setEmailConfirmed(boolean emailConfirmed) { this.emailConfirmed = emailConfirmed; }
     public String getConfirmationCode() { return confirmationCode; }
     public void setConfirmationCode(String confirmationCode) { this.confirmationCode = confirmationCode; }
-=======
-    @Override
+
+    // --- Spring Security UserDetails Overrides ---
+
+    public boolean isEnabled() {
+        return this.emailConfirmed;
+    }
+
     public boolean isCredentialsNonExpired() {
         return true;
     }
-
-//    @Override
-//    public boolean isEnabled() {
-//        return true;
-//    }
-    @Override
-    public boolean isEnabled() {
-        return this.emailConfirmation;
-    }
-    public enum Role{
-        USER, ADMIN
-    }
->>>>>>> new-feature
 }
